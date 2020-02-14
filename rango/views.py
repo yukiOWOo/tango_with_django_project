@@ -12,6 +12,7 @@ from django.contrib.auth import authenticate
 from django.contrib.auth import login
 from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_required
+from datetime import datetime
 
 
 def show_category(request, category_name_slug):
@@ -27,6 +28,7 @@ def show_category(request, category_name_slug):
         # Retrieve all of the associated pages.
         # Note that filter() will return a list of page objects or an empty list
         pages = Page.objects.filter(category=category)
+
         # Adds our results list to the template context under name pages.
         context_dict['pages'] = pages
 
@@ -45,11 +47,6 @@ def show_category(request, category_name_slug):
 
 
 def index(request):
-    # Query the database for a list of ALL categories currently stored.
-    # Order the categories by no. likes in descending order.
-    # Retrieve the top 5 only - or all if less than 5.
-    # Place the list in our context_dict dictionary
-    # that will be passed to the template engine.
     category_list = Category.objects.order_by('-likes')[:5]
     page_list = Page.objects.order_by('-views')[:5]
 
@@ -58,13 +55,47 @@ def index(request):
     context_dict['categories'] = category_list
     context_dict['pages'] = page_list
 
-    # Render the response and send it back!
+    visitor_cookie_handler(request)
+
     return render(request, 'rango/index.html', context=context_dict)
 
 
 def about(request):
     context_dict = {'boldmessage': "This tutorial has been put together by Yuki!"}
-    return render(request, 'rango/about.html', {})
+    visitor_cookie_handler(request)
+    context_dict['visits'] = request.session['visits']
+
+    return render(request, 'rango/about.html', context=context_dict)
+
+
+def visitor_cookie_handler(request):
+    # Get the number of visits to the site.
+    # We use the COOKIES.get() function to obtain the visits cookie.
+    # If the cookie exists, the value returned is casted to an integer.
+    # If the cookie doesn't exist, then the default value of 1 is used.
+    visits = int(get_server_side_cookie(request, 'visits', '1'))
+    last_visit_cookie = get_server_side_cookie(request, 'last_visit', str(datetime.now()))
+    last_visit_time = datetime.strptime(last_visit_cookie[:-7], '%Y-%m-%d %H:%M:%S')
+
+    # If it's been more than a day since the last visit...
+    if (datetime.now() - last_visit_time).days > 0:
+        visits = visits + 1
+        # Update the last visit cookie now that we have updated the count
+        request.session['last_visit'] = str(datetime.now())
+    else:
+        # Set the last visit cookie
+        request.session['last_visit'] = last_visit_cookie
+
+    # Update/set the visits cookie
+    request.session['visits'] = visits
+
+
+# A helper method
+def get_server_side_cookie(request, cookie, default_val=None):
+    val = request.session.get(cookie)
+    if not val:
+        val = default_val
+    return val
 
 
 @login_required
